@@ -8,24 +8,24 @@ case "$ACTION" in
     "deploy")
         echo "Building Docker image and deploying container..."
         docker build -t wenfxl/wenfxl-codex-manager:latest . && \
-        docker-compose down && \
-        docker-compose up -d
+        docker compose down && \
+        docker compose up -d
         ;;
     "start")
         echo "Starting container..."
-        docker-compose up -d
+        docker compose up -d
         ;;
     "stop")
         echo "Stopping container..."
-        docker-compose down
+        docker compose down
         ;;
     "restart")
         echo "Restarting container..."
-        docker-compose restart
+        docker compose restart
         ;;
     "logs")
         echo "Viewing logs..."
-        docker-compose logs -f
+        docker compose logs -f
         ;;
     "push")
         echo "Pushing to remote repository..."
