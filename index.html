@@ -388,6 +388,7 @@
                                     <option value="tempmail_org">tempmail_org</option>
                                     <option value="duckmail">duckmail (DuckMail 鸭子邮箱)</option>
                                     <option value="generator_email">generator_email</option>
+                                    <option value="ms_token">ms_token (微软第三方接码池直导)</option>
                                 </select>
 
                                 <label class="form-label mt-4">发信域名池 (mail_domains)</label>
@@ -545,8 +546,29 @@
                                     <div class="text-[10px] md:text-xs text-red-700 mt-3 font-bold bg-red-100 p-2 rounded leading-relaxed">
                                         <p>⚠️ 若开启左边多级域名泛解析模式，必需部署魔改版：<br><a href="https://github.com/wenfxl/cloudflare_temp_email_worker" class="underline break-all" target="_blank">github.com/wenfxl/cloudflare_temp_email_worker</a></p>
                                     </div>
+                                        </div>
+                                    </div>
                                 </div>
                                 
+                                <div v-if="config.email_api_mode === 'ms_token'">
+                                    <p class="text-xs md:text-sm text-emerald-700 mb-3 md:mb-4 font-bold bg-emerald-100 inline-block px-2 py-1 rounded">当前: 微软第三方接码池直导 (MS Token)</p>
+                                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-4">
+                                        <label class="form-label font-bold text-gray-700 block gap-1 mb-1">
+                                            第三方接码接口 Base URL
+                                            <span class="text-[10px] md:text-xs font-normal text-gray-400 block mt-1">例如: https://www.appleemail.top</span>
+                                        </label>
+                                        <input type="text" v-model="config.ms_token.api_base" class="form-input text-sm border-gray-300 focus:ring-emerald-500" placeholder="https://www.appleemail.top">
+                                        
+                                        <label class="form-label font-bold text-gray-700 block mt-4">
+                                            导入账号列表 <span class="text-[10px] md:text-xs font-normal text-gray-400 block mt-1">支持格式: 账号----密码----uuid----token (换行分隔)</span>
+                                        </label>
+                                        <textarea v-model="config.ms_token.accounts_str" class="form-input h-[150px] md:h-[200px] font-mono text-[10px] md:text-xs leading-relaxed border-emerald-200 focus:ring-emerald-500" placeholder="SydneyAndrea7794@hotmail.com----rq838839----9e5f94bc-e8a4-4e73-b8be-63364c29d753----MC..."></textarea>
+                                        <p class="form-hint mt-2 text-[10px] md:text-xs text-emerald-600 bg-emerald-50 p-2 rounded">
+                                            💡 系统在注册时会自动提取第一行并移出文本框，提取后账号会存入内存且自动写入配置文件。重启不丢失。
+                                        </p>
+                                    </div>
+                                </div>
+
                                 <div v-if="config.email_api_mode === 'imap' && config.imap">
                                     <p class="text-xs md:text-sm text-yellow-700 mb-3 md:mb-4 font-bold bg-yellow-100 inline-block px-2 py-1 rounded">当前: IMAP 接码</p>
                                     <label class="form-label">服务器地址</label>

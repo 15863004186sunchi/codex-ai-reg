@@ -162,6 +162,9 @@ DUCKMAIL_FORWARD_MODE: str = "Gmail_OAuth"
 DUCKMAIL_FORWARD_EMAIL: str = ""
 DUCK_USE_PROXY: bool = True
 
+MS_TOKEN_API_BASE: str = ""
+MS_TOKEN_ACCOUNTS_STR: str = ""
+
 HERO_SMS_ENABLED: bool = False
 HERO_SMS_API_KEY: str = ""
 HERO_SMS_BASE_URL: str = "https://hero-sms.com/stubs/handler_api.php"
@@ -222,6 +225,7 @@ def reload_all_configs():
     global AI_API_BASE, AI_API_KEY, AI_MODEL, AI_ENABLE_PROFILE
     global CPA_AUTO_CHECK, SUB2API_AUTO_CHECK
     global TG_BOT
+    global MS_TOKEN_API_BASE, MS_TOKEN_ACCOUNTS_STR
     global DUCKMAIL_API_URL, DUCKMAIL_DOMAIN, DUCKMAIL_MODE, DUCK_API_TOKEN, DUCK_COOKIE, DUCK_OFFICIAL_API_BASE
     global DUCKMAIL_FORWARD_MODE, DUCKMAIL_FORWARD_EMAIL
     global DUCK_USE_PROXY
@@ -444,6 +448,10 @@ def reload_all_configs():
         HERO_SMS_POLL_TIMEOUT_SEC = int(_hero_sms_conf.get("poll_timeout_sec", 120))
     except:
         HERO_SMS_POLL_TIMEOUT_SEC = 120
+
+    _ms_token = _c.get("ms_token", {})
+    MS_TOKEN_API_BASE = str(_ms_token.get("api_base", "")).strip().rstrip("/")
+    MS_TOKEN_ACCOUNTS_STR = str(_ms_token.get("accounts_str", "")).strip()
 
 
     _ai = _c.get("ai_service", {})

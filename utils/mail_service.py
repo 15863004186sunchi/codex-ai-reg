@@ -179,6 +179,48 @@ def get_email_and_token(proxies: Any = None) -> tuple:
     mode = cfg.EMAIL_API_MODE
     mail_proxies = proxies if cfg.USE_PROXY_FOR_EMAIL else None
 
+    if mode == "ms_token":
+        try:
+            with luckmail_lock: # Reuse the lock to prevent race conditions on account extraction
+                full_str = cfg.MS_TOKEN_ACCOUNTS_STR.strip()
+                if not full_str:
+                    print(f"[{cfg.ts()}] [ERROR] MS Token 账号池已空，请先在后台导入！")
+                    return None, None
+                
+                lines = [l.strip() for l in full_str.split("\n") if l.strip()]
+                if not lines:
+                    return None, None
+                
+                selected_account = lines.pop(0)
+                new_str = "\n".join(lines)
+                
+                # 同步回配置文件
+                cfg.MS_TOKEN_ACCOUNTS_STR = new_str
+                try:
+                    import yaml
+                    with cfg.CONFIG_FILE_LOCK:
+                        with open(cfg.CONFIG_PATH, "r", encoding="utf-8") as f:
+                            y = yaml.safe_load(f) or {}
+                        y.setdefault("ms_token", {})["accounts_str"] = new_str
+                        with open(cfg.CONFIG_PATH, "w", encoding="utf-8") as f:
+                            yaml.dump(y, f, allow_unicode=True, sort_keys=False)
+                except Exception as e:
+                    print(f"[{cfg.ts()}] [WARNING] 账号池同步失败: {e}")
+
+                parts = selected_account.split("----")
+                if len(parts) < 4:
+                    print(f"[{cfg.ts()}] [ERROR] MS Token 账号格式错误: {selected_account}")
+                    return None, None
+                
+                email = parts[0].strip()
+                jwt = f"ms_token://{selected_account}"
+                set_last_email(email)
+                print(f"[{cfg.ts()}] [INFO] MS Token 成功提取账号: ({mask_email(email)}) (剩余: {len(lines)})")
+                return email, jwt
+        except Exception as e:
+            print(f"[{cfg.ts()}] [ERROR] MS Token 账号提取异常: {e}")
+            return None, None
+
     if mode == "mail_curl":
         try:
             url = f"{cfg.MC_API_BASE}/api/remail?key={cfg.MC_KEY}"
@@ -561,7 +603,42 @@ def get_oai_code(
     for attempt in range(20):
         if getattr(cfg, 'GLOBAL_STOP', False): return ""
         try:
-            if mode == "mail_curl":
+            if mode == "ms_token":
+                if not jwt or not jwt.startswith("ms_token://"):
+                    return ""
+                account_str = jwt.replace("ms_token://", "")
+                parts = account_str.split("----")
+                if len(parts) >= 4:
+                    email_addr = parts[0].strip()
+                    client_id = parts[2].strip()
+                    refresh_token = parts[-1].strip()
+                    
+                    url = f"{cfg.MS_TOKEN_API_BASE}/api/account/emails?email={email_addr}&refresh_token={refresh_token}&client_id={client_id}"
+                    try:
+                        res = requests.get(url, proxies=mail_proxies, verify=False, timeout=15)
+                        if res.status_code == 200:
+                            data = res.json()
+                            emails_data = data.get("data", [])
+                            for m in emails_data:
+                                m_id = str(m.get("id"))
+                                if m_id in processed_mail_ids:
+                                    continue
+                                
+                                subject = m.get("subject", "")
+                                body = m.get("body", "")
+                                content = f"{subject}\n{body}"
+                                if "openai" in content.lower() or "verification" in content.lower():
+                                    code = _extract_otp_code(content)
+                                    if code:
+                                        processed_mail_ids.add(m_id)
+                                        print(f"[{cfg.ts()}] [SUCCESS] MS Token ({mask_email(email)}) 验证码提取成功: {code}")
+                                        return code
+                    except Exception as e:
+                        print(f"[{cfg.ts()}] [ERROR] MS Token 接口请求异常: {e}")
+                else:
+                    return ""
+
+            elif mode == "mail_curl":
                 inbox_url = (f"{cfg.MC_API_BASE}/api/inbox"
                              f"?key={cfg.MC_KEY}&mailbox_id={mailbox_id}")
                 res = requests.get(inbox_url, proxies=mail_proxies,

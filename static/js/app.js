@@ -198,6 +198,9 @@ createApp({
 				if (!this.config.sub_domain_level) {
                     this.config.sub_domain_level = 1;
                 }
+                if (!this.config.ms_token) {
+                    this.config.ms_token = { api_base: '', accounts_str: '' };
+                }
                 if (!this.config.sub2api_mode) {
                     this.config.sub2api_mode = {};
                 }
