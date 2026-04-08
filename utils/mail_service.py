@@ -613,28 +613,54 @@ def get_oai_code(
                     client_id = parts[2].strip()
                     refresh_token = parts[-1].strip()
                     
-                    url = f"{cfg.MS_TOKEN_API_BASE}/api/account/emails?email={email_addr}&refresh_token={refresh_token}&client_id={client_id}"
                     try:
-                        res = requests.get(url, proxies=mail_proxies, verify=False, timeout=15)
-                        if res.status_code == 200:
-                            data = res.json()
-                            emails_data = data.get("data", [])
-                            for m in emails_data:
-                                m_id = str(m.get("id"))
-                                if m_id in processed_mail_ids:
-                                    continue
-                                
-                                subject = m.get("subject", "")
-                                body = m.get("body", "")
-                                content = f"{subject}\n{body}"
-                                if "openai" in content.lower() or "verification" in content.lower():
-                                    code = _extract_otp_code(content)
-                                    if code:
-                                        processed_mail_ids.add(m_id)
-                                        print(f"[{cfg.ts()}] [SUCCESS] MS Token ({mask_email(email)}) 验证码提取成功: {code}")
-                                        return code
+                        url = f"{cfg.MS_TOKEN_API_BASE.rstrip('/')}/api/mail-new"
+                        for folder in ["INBOX", "Junk", "JunkEmail", "Spam", "垃圾邮件"]:
+                            payload = {
+                                "refresh_token": refresh_token,
+                                "client_id": client_id,
+                                "email": email_addr,
+                                "mailbox": folder,
+                                "response_type": "json"
+                            }
+                            res = requests.get(url, params=payload, proxies=mail_proxies, verify=_ssl_verify(), timeout=15)
+                            if res.status_code == 200:
+                                raw_data = res.json()
+                                emails = (
+                                    raw_data.get("data") or raw_data.get("emails") or
+                                    raw_data.get("messages") or raw_data.get("results") or []
+                                    if isinstance(raw_data, dict) else raw_data
+                                )
+                                if isinstance(emails, dict): emails = [emails]
+                                if not isinstance(emails, list): emails = []
+
+                                try:
+                                    emails.sort(key=lambda x: str(x.get("date", "")), reverse=True)
+                                except:
+                                    pass
+
+                                for m in emails:
+                                    m_subject = str(m.get("subject", ""))
+                                    if not m_subject: continue
+                                    if m_subject not in processed_mail_ids:
+                                        content = "\n".join(filter(None, [
+                                            str(m.get("subject", "")),
+                                            str(m.get("text", "")),
+                                            str(m.get("html", "")),
+                                        ]))
+                                        if "openai" not in content.lower() and "chatgpt" not in content.lower():
+                                            continue
+                                        code = _extract_otp_code(content)
+                                        if code:
+                                            processed_mail_ids.add(m_subject)
+                                            print(f"\n[{cfg.ts()}] [SUCCESS] ms_token ({folder}) 提取成功: {code}")
+                                            return code
+                            elif res.status_code != 404:
+                                print(f"[{cfg.ts()}] [DEBUG] ms_token ({folder}) 状态码 {res.status_code}, 详情: {res.text[:100]}")
+                            time.sleep(2)
                     except Exception as e:
-                        print(f"[{cfg.ts()}] [ERROR] MS Token 接口请求异常: {e}")
+                        print(f"[{cfg.ts()}] [DEBUG] ms_token 提取过程严重错误: {e}")
+                    return ""
                 else:
                     return ""
 
