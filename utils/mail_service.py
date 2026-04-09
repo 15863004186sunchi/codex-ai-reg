@@ -1162,5 +1162,89 @@ def get_oai_code(
             print(f"[{cfg.ts()}] [INFO] 仍在查询({mask_email(email)})邮箱，暂未收到验证码 (已尝试 {attempt + 1}/20)...")
         time.sleep(3)
 
-    print(f"\n[{cfg.ts()}] [ERROR] ({mask_email(email)})邮箱接收验证码超时")
+    print(f"\n[{cfg.ts()}] [ERROR] ({mask_email(email)}) 验证码接收超时，执行最终兜底策略（忽略已读记录，尝试提取最新一条）...")
+    
+    try:
+        if mode == "ms_token":
+            account_str = jwt.replace("ms_token://", "")
+            parts = account_str.split("----")
+            if len(parts) >= 4:
+                email_addr = parts[0].strip()
+                client_id = parts[2].strip()
+                refresh_token = parts[-1].strip()
+                url = f"{cfg.MS_TOKEN_API_BASE.rstrip('/')}/api/mail-new"
+                # 对关键文件夹进行最后一搏
+                for folder in ["INBOX", "Junk", "JunkEmail", "Spam", "垃圾邮件"]:
+                    payload = {"refresh_token": refresh_token, "client_id": client_id, "email": email_addr, "mailbox": folder, "response_type": "json"}
+                    try:
+                        res = requests.get(url, params=payload, proxies=mail_proxies, verify=_ssl_verify(), timeout=15)
+                        if res.status_code == 200:
+                            raw_data = res.json()
+                            emails = raw_data.get("data") or raw_data.get("emails") or raw_data.get("messages") or raw_data.get("results") or []
+                            if isinstance(emails, dict): emails = [emails]
+                            if isinstance(emails, list) and emails:
+                                # 选出最新的一封
+                                emails.sort(key=lambda x: str(x.get("date", "")), reverse=True)
+                                for m in emails:
+                                    content = "\n".join(filter(None, [str(m.get("subject", "")), str(m.get("text", "")), str(m.get("html", ""))]))
+                                    if "openai" in content.lower() or "chatgpt" in content.lower():
+                                        code = _extract_otp_code(content)
+                                        if code:
+                                            print(f"[{cfg.ts()}] [SUCCESS] ({mask_email(email)}) 兜底收割成功: {code}")
+                                            return code
+                    except: pass
+                    time.sleep(1)
+
+        elif mode == "imap" and mail_conn:
+            for folder in ["INBOX", "Junk", '"Junk Email"', "Spam", '"[Gmail]/Spam"', '"垃圾邮件"']:
+                try:
+                    mail_conn.select(folder, readonly=True)
+                    status, messages = mail_conn.search(None, f'(FROM "openai.com" TO "{email}")')
+                    if status == "OK" and messages[0]:
+                        for mail_id in reversed(messages[0].split()):
+                            res, data = mail_conn.fetch(mail_id, "(RFC822)")
+                            for resp_part in data:
+                                if isinstance(resp_part, tuple):
+                                    import email as email_lib
+                                    msg = email_lib.message_from_bytes(resp_part[1])
+                                    content = ""
+                                    if msg.is_multipart():
+                                        for part in msg.walk():
+                                            if part.get_content_type() == "text/plain":
+                                                try: content += part.get_payload(decode=True).decode("utf-8", "ignore")
+                                                except: pass
+                                    else:
+                                        content = msg.get_payload(decode=True).decode("utf-8", "ignore")
+                                    code = _extract_otp_code(f"{msg.get('Subject','')}\n{content}")
+                                    if code:
+                                        print(f"[{cfg.ts()}] [SUCCESS] ({mask_email(email)}) IMAP 兜底收割成功: {code}")
+                                        return code
+                            break # 只试最新的
+                except: continue
+                
+        elif mode == "freemail":
+            headers = {"Authorization": f"Bearer {cfg.FREEMAIL_API_TOKEN}"}
+            res = requests.get(f"{cfg.FREEMAIL_API_URL.rstrip('/')}/api/emails", params={"mailbox": email, "limit": 5}, headers=headers, proxies=mail_proxies, verify=_ssl_verify(), timeout=15)
+            if res.status_code == 200:
+                raw_data = res.json()
+                emails_list = raw_data.get("data") or raw_data.get("emails") or []
+                if emails_list:
+                    email_item = emails_list[0]
+                    mail_id = str(email_item.get("id"))
+                    dr = requests.get(f"{cfg.FREEMAIL_API_URL.rstrip('/')}/api/email/{mail_id}", headers=headers, proxies=mail_proxies, verify=_ssl_verify(), timeout=15)
+                    if dr.status_code == 200:
+                        d = dr.json()
+                        content = "\n".join(filter(None, [str(d.get("subject", "")), str(d.get("content", "")), str(d.get("html_content", ""))]))
+                        code = _extract_otp_code(content)
+                        if code:
+                            print(f"[{cfg.ts()}] [SUCCESS] ({mask_email(email)}) Freemail 兜底收割成功: {code}")
+                            return code
+
+    except Exception as e:
+        print(f"[{cfg.ts()}] [DEBUG] 兜底过程中出现非预期错误: {e}")
+
+    if mail_conn:
+        try: mail_conn.logout()
+        except: pass
+
     return ""
