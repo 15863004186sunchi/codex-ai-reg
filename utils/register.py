@@ -540,7 +540,7 @@ def run(proxy: Optional[str], run_ctx: dict = None) -> tuple:
             for resend_attempt in range(max(1, cfg.MAX_OTP_RETRIES)):
                 if getattr(cfg, 'GLOBAL_STOP', False): return None, None
                 if resend_attempt > 0:
-                    print(f"\n[{cfg.ts()}] [INFO] 正在重试 {resend_attempt}/{cfg.MAX_OTP_RETRIES}...")
+                    print(f"\n[{cfg.ts()}] [INFO] 正在重试 ({mask_email(email)}) {resend_attempt}/{cfg.MAX_OTP_RETRIES}...")
                     try:
                         sentinel_resend = generate_payload(did=did, flow="authorize_continue", proxy=proxy,
                                                            user_agent=current_ua, impersonate="chrome110", ctx=reg_ctx)
@@ -790,7 +790,7 @@ def run(proxy: Optional[str], run_ctx: dict = None) -> tuple:
             for resend_attempt in range(max(1, cfg.MAX_OTP_RETRIES)):
                 if getattr(cfg, 'GLOBAL_STOP', False): return None, None
                 if resend_attempt > 0:
-                    print(f"\n[{cfg.ts()}] [INFO] 正在重试 {resend_attempt}/{cfg.MAX_OTP_RETRIES}...")
+                    print(f"\n[{cfg.ts()}] [INFO] 正在重试 ({mask_email(email)}) {resend_attempt}/{cfg.MAX_OTP_RETRIES}...")
                     try:
                         sentinel_log_resend = generate_payload(did=log_did, flow="authorize_continue", proxy=proxy,
                                                                user_agent=current_ua, impersonate="chrome110",

@@ -642,7 +642,10 @@ def get_oai_code(
                                 for m in emails:
                                     m_subject = str(m.get("subject", ""))
                                     if not m_subject: continue
-                                    if m_subject not in processed_mail_ids:
+                                    
+                                    # 使用 ID 或者 主题+日期 作为唯一标识，防止二次登录时的验证码被跳过
+                                    m_id = str(m.get("id") or (m_subject + str(m.get("date", ""))))
+                                    if m_id not in processed_mail_ids:
                                         content = "\n".join(filter(None, [
                                             str(m.get("subject", "")),
                                             str(m.get("text", "")),
@@ -652,7 +655,7 @@ def get_oai_code(
                                             continue
                                         code = _extract_otp_code(content)
                                         if code:
-                                            processed_mail_ids.add(m_subject)
+                                            processed_mail_ids.add(m_id)
                                             print(f"\n[{cfg.ts()}] [SUCCESS] ms_token ({folder}) 提取成功: {code}")
                                             return code
                             elif res.status_code != 404:
