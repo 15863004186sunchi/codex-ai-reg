@@ -3,7 +3,7 @@
 # https://github.com/dreamhunter2333/cloudflare_temp_email
 # https://github.com/maillab/cloud-mail
 # https://github.com/s12ryt/mail-curl
-# 可选值: "imap" / "freemail" / "cloudflare_temp_email" / "cloudmail" / "mail_curl" / "luckmail"
+# 可选值: "imap" / "freemail" / "cloudflare_temp_email" / "cloudmail" / "mail_curl" / "luckmail" / "ms_token" / "mailapi_icu"
 email_api_mode: "cloudflare_temp_email"
 
 # [基础配置: cloudflare_temp_email / imap / cloudmail 共享]
@@ -91,6 +91,12 @@ luckmail:
 ms_token:
   api_base: "https://www.appleemail.top"
   accounts_str: ""
+
+# [模式 "mailapi_icu" 专属配置]
+# 格式: 邮箱----https://mailapi.icu/key?type=html&orderNo=xxx (每行一条)
+mailapi_icu:
+  accounts_str: ""
+
 # [代理配置]
 # openai注册时代理地址，例子：http://127.0.0.1:7897。如果是国外服务器此项可以不填
 default_proxy: ""

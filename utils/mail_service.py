@@ -221,6 +221,47 @@ def get_email_and_token(proxies: Any = None) -> tuple:
             print(f"[{cfg.ts()}] [ERROR] MS Token 账号提取异常: {e}")
             return None, None
 
+    if mode == "mailapi_icu":
+        try:
+            with luckmail_lock:
+                full_str = cfg.MAILAPI_ICU_ACCOUNTS_STR.strip()
+                if not full_str:
+                    print(f"[{cfg.ts()}] [ERROR] MailAPI.ICU 账号池已空，请先在后台导入！")
+                    return None, None
+
+                lines = [l.strip() for l in full_str.split("\n") if l.strip()]
+                if not lines:
+                    return None, None
+
+                selected_account = lines.pop(0)
+                new_str = "\n".join(lines)
+
+                cfg.MAILAPI_ICU_ACCOUNTS_STR = new_str
+                try:
+                    import yaml
+                    with cfg.CONFIG_FILE_LOCK:
+                        with open(cfg.CONFIG_PATH, "r", encoding="utf-8") as f:
+                            y = yaml.safe_load(f) or {}
+                        y.setdefault("mailapi_icu", {})["accounts_str"] = new_str
+                        with open(cfg.CONFIG_PATH, "w", encoding="utf-8") as f:
+                            yaml.dump(y, f, allow_unicode=True, sort_keys=False)
+                except Exception as e:
+                    print(f"[{cfg.ts()}] [WARNING] MailAPI.ICU 账号池同步失败: {e}")
+
+                parts = selected_account.split("----")
+                if len(parts) < 2:
+                    print(f"[{cfg.ts()}] [ERROR] MailAPI.ICU 账号格式错误（需为 email----api_url）: {selected_account}")
+                    return None, None
+
+                email = parts[0].strip()
+                jwt = f"mailapi_icu://{selected_account}"
+                set_last_email(email)
+                print(f"[{cfg.ts()}] [INFO] MailAPI.ICU 成功提取账号: ({mask_email(email)}) (剩余: {len(lines)})")
+                return email, jwt
+        except Exception as e:
+            print(f"[{cfg.ts()}] [ERROR] MailAPI.ICU 账号提取异常: {e}")
+            return None, None
+
     if mode == "mail_curl":
         try:
             url = f"{cfg.MC_API_BASE}/api/remail?key={cfg.MC_KEY}"
@@ -666,6 +707,41 @@ def get_oai_code(
                     return ""
                 else:
                     return ""
+
+            elif mode == "mailapi_icu":
+                if not jwt or not jwt.startswith("mailapi_icu://"):
+                    return ""
+                account_str = jwt.replace("mailapi_icu://", "")
+                parts = account_str.split("----")
+                if len(parts) < 2:
+                    return ""
+                api_url = parts[1].strip()
+                # 将 type=html 替换为 type=code 以获得结构化响应（含 verification_code 字段）
+                import urllib.parse as _urlparse
+                parsed_u = _urlparse.urlparse(api_url)
+                qs = _urlparse.parse_qs(parsed_u.query, keep_blank_values=True)
+                qs["type"] = ["code"]
+                new_query = _urlparse.urlencode({k: v[0] for k, v in qs.items()})
+                code_url = _urlparse.urlunparse(parsed_u._replace(query=new_query))
+                try:
+                    res = requests.get(code_url, proxies=mail_proxies, verify=_ssl_verify(), timeout=20)
+                    if res.status_code == 200:
+                        data = res.json()
+                        if isinstance(data, list) and data:
+                            entry = data[0]
+                            code = str(entry.get("verification_code") or "").strip()
+                            if not code:
+                                # fallback：从 text 字段自行提取
+                                code = _extract_otp_code(
+                                    str(entry.get("text") or "") + "\n" + str(entry.get("subject") or "")
+                                )
+                            if code:
+                                print(f"\n[{cfg.ts()}] [SUCCESS] MailAPI.ICU ({mask_email(email)}) 提取成功: {code}")
+                                return code
+                    elif res.status_code != 404:
+                        print(f"[{cfg.ts()}] [DEBUG] MailAPI.ICU 状态码 {res.status_code}: {res.text[:120]}")
+                except Exception as e:
+                    print(f"[{cfg.ts()}] [DEBUG] MailAPI.ICU 请求异常: {e}")
 
             elif mode == "mail_curl":
                 inbox_url = (f"{cfg.MC_API_BASE}/api/inbox"
