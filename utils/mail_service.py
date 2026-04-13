@@ -730,18 +730,23 @@ def get_oai_code(
                     try:
                         resp = requests.get(code_url, proxies=current_proxies, verify=_ssl_verify(), timeout=12)
                         if resp.status_code == 200:
-                            # 1. 尝试 JSON 解析 (预期结构: [{"verification_code": "123456", ...}])
+                            _res_code = ""
+                            # 1. 尝试 JSON 解析
                             try:
                                 data = resp.json()
                                 if isinstance(data, list) and data:
                                     entry = data[0]
-                                    _c = str(entry.get("verification_code") or "").strip()
-                                    if not _c:
-                                        _c = _extract_otp_code(str(entry.get("text", "")) + "\n" + str(entry.get("subject", "")))
-                                    return _c
+                                    _res_code = str(entry.get("verification_code") or "").strip()
+                                    if not _res_code:
+                                        _res_code = _extract_otp_code(str(entry.get("text", "")) + "\n" + str(entry.get("subject", "")))
                             except:
-                                # 2. 非 JSON 或解析失败，则直接正则匹配响应全文本 (适配直接返回数字或 HTML 的情况)
-                                return _extract_otp_code(resp.text)
+                                pass
+                            
+                            # 2. 如果 JSON 没拿到，或者是如您所见的 HTML/纯数字返回，则统一正则提取
+                            if not _res_code:
+                                _res_code = _extract_otp_code(resp.text)
+                            return _res_code
+
                         elif resp.status_code != 404:
                             print(f"[{cfg.ts()}] [DEBUG] MailAPI.ICU 响应异常: {resp.status_code}")
                     except Exception as e:
