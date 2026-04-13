@@ -715,33 +715,52 @@ def get_oai_code(
                 parts = account_str.split("----")
                 if len(parts) < 2:
                     return ""
-                api_url = parts[1].strip()
-                # 将 type=html 替换为 type=code 以获得结构化响应（含 verification_code 字段）
+                email, api_url = parts[0].strip(), parts[1].strip()
+
+                # 将 type=html 替换为 type=code
                 import urllib.parse as _urlparse
                 parsed_u = _urlparse.urlparse(api_url)
                 qs = _urlparse.parse_qs(parsed_u.query, keep_blank_values=True)
                 qs["type"] = ["code"]
                 new_query = _urlparse.urlencode({k: v[0] for k, v in qs.items()})
                 code_url = _urlparse.urlunparse(parsed_u._replace(query=new_query))
-                try:
-                    res = requests.get(code_url, proxies=mail_proxies, verify=_ssl_verify(), timeout=20)
-                    if res.status_code == 200:
-                        data = res.json()
-                        if isinstance(data, list) and data:
-                            entry = data[0]
-                            code = str(entry.get("verification_code") or "").strip()
-                            if not code:
-                                # fallback：从 text 字段自行提取
-                                code = _extract_otp_code(
-                                    str(entry.get("text") or "") + "\n" + str(entry.get("subject") or "")
-                                )
-                            if code:
-                                print(f"\n[{cfg.ts()}] [SUCCESS] MailAPI.ICU ({mask_email(email)}) 提取成功: {code}")
-                                return code
-                    elif res.status_code != 404:
-                        print(f"[{cfg.ts()}] [DEBUG] MailAPI.ICU 状态码 {res.status_code}: {res.text[:120]}")
-                except Exception as e:
-                    print(f"[{cfg.ts()}] [DEBUG] MailAPI.ICU 请求异常: {e}")
+
+                def _fetch_code(use_proxy=True):
+                    current_proxies = mail_proxies if use_proxy else None
+                    try:
+                        resp = requests.get(code_url, proxies=current_proxies, verify=_ssl_verify(), timeout=12)
+                        if resp.status_code == 200:
+                            # 1. 尝试 JSON 解析 (预期结构: [{"verification_code": "123456", ...}])
+                            try:
+                                data = resp.json()
+                                if isinstance(data, list) and data:
+                                    entry = data[0]
+                                    _c = str(entry.get("verification_code") or "").strip()
+                                    if not _c:
+                                        _c = _extract_otp_code(str(entry.get("text", "")) + "\n" + str(entry.get("subject", "")))
+                                    return _c
+                            except:
+                                # 2. 非 JSON 或解析失败，则直接正则匹配响应全文本 (适配直接返回数字或 HTML 的情况)
+                                return _extract_otp_code(resp.text)
+                        elif resp.status_code != 404:
+                            print(f"[{cfg.ts()}] [DEBUG] MailAPI.ICU 响应异常: {resp.status_code}")
+                    except Exception as e:
+                        if use_proxy:
+                            print(f"[{cfg.ts()}] [DEBUG] MailAPI.ICU 代理请求异常 (将尝试直连): {e}")
+                            return "RETRY_DIRECT"
+                        else:
+                            print(f"[{cfg.ts()}] [DEBUG] MailAPI.ICU 直连请求异常: {e}")
+                    return ""
+
+                # 第一次尝试 (使用代理)
+                code = _fetch_code(use_proxy=True)
+                if code == "RETRY_DIRECT":
+                    # 第二次尝试 (不使用代理)
+                    code = _fetch_code(use_proxy=False)
+
+                if code and code != "RETRY_DIRECT":
+                    print(f"\n[{cfg.ts()}] [SUCCESS] MailAPI.ICU ({mask_email(email)}) 提取成功: {code}")
+                    return code
 
             elif mode == "mail_curl":
                 inbox_url = (f"{cfg.MC_API_BASE}/api/inbox"
